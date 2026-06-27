@@ -14,6 +14,18 @@ node_modules/
 dist/
 build/
 
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Test scripts
+test-contract.mjs
+test-*.js
+
+# Temporary commit helper
+commit-message.txt
+
 # OS
 .DS_Store
 Thumbs.db

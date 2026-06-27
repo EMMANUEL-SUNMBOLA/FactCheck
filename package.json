@@ -1,0 +1,17 @@
+{
+  "name": "factcheck",
+  "version": "1.0.0",
+  "description": "FactCheck — Trustless Web Fact Verifier on GenLayer",
+  "type": "module",
+  "scripts": {
+    "start": "node bot/index.js",
+    "dev": "nodemon bot/index.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.10.0",
+    "dotenv": "^17.4.2",
+    "genlayer-js": "^0.18.14",
+    "node-telegram-bot-api": "^0.67.0",
+    "nodemon": "^3.1.14"
+  }
+}
