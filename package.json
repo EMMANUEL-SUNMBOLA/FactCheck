@@ -4,8 +4,8 @@
   "description": "FactCheck — Trustless Web Fact Verifier on GenLayer",
   "type": "module",
   "scripts": {
-    "start": "node bot/index.js",
-    "dev": "nodemon bot/index.js"
+    "start": "NODE_OPTIONS=\"--dns-result-order=ipv4first\" node bot/index.js",
+    "dev": "NODE_OPTIONS=\"--dns-result-order=ipv4first\" nodemon bot/index.js"
   },
   "dependencies": {
     "better-sqlite3": "^12.10.0",

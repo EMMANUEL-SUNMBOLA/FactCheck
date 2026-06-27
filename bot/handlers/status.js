@@ -18,7 +18,7 @@ export default function statusHandler(bot, client) {
 
     const row = getCheck(checkId);
     if (!row) {
-      return bot.sendMessage(chatId, `Check #${checkId} not found in local database.`);
+      return bot.sendMessage(chatId, `Check #${checkId} wasn't found`);
     }
 
     try {
@@ -64,7 +64,7 @@ export default function statusHandler(bot, client) {
                 const result = await client.readContract({
                   address: config.contractAddress,
                   functionName: 'get_result',
-                  args: [checkId],
+                  args: [BigInt(checkId)],
                 });
 
                 let answer = null;

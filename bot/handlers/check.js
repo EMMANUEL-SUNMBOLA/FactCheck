@@ -66,7 +66,7 @@ export default function checkHandler(bot, client) {
         args: [],
       });
 
-      const predictedId = String(Number(total) + 1);
+      const predictedId = BigInt(Number(total) + 1);
 
       const hash = await client.writeContract({
         address: config.contractAddress,
@@ -95,14 +95,25 @@ export default function checkHandler(bot, client) {
 
       try {
         await client.waitForTransactionReceipt({ hash, status: 'ACCEPTED' });
+      } catch (waitErr) {
+        console.error('Wait error:', waitErr.message);
+        await bot.sendMessage(chatId,
+          `⏳ The validators are arguing this one out for #${predictedId}.\n` +
+          `Run /status ${predictedId} after 1 minute to see the conclusion on-chain.`,
+          { parse_mode: 'HTML' }
+        );
+        updateCheckStatus({ check_id: predictedId, status: 'pending' });
+        return;
+      }
 
+      let answer = null;
+      try {
         const result = await client.readContract({
           address: config.contractAddress,
           functionName: 'get_result',
           args: [predictedId],
         });
 
-        let answer = null;
         if (typeof result === 'string' && result.startsWith('{')) {
           try {
             const parsed = JSON.parse(result);
@@ -111,33 +122,48 @@ export default function checkHandler(bot, client) {
         } else if (result && typeof result === 'object' && result.answer) {
           answer = result.answer;
         }
+      } catch (readErr) {
+        console.error('Read error:', readErr.message);
+        await bot.sendMessage(chatId,
+          `⏳ Result for #${predictedId} isn't readable yet — validators may still be reaching consensus.\n` +
+          `Run /status ${predictedId} after 1 minute.`,
+          { parse_mode: 'HTML' }
+        );
+        updateCheckStatus({ check_id: predictedId, status: 'pending' });
+        return;
+      }
 
-        updateCheckStatus({
-          check_id: predictedId,
-          status: answer ? 'finalized' : 'executed',
-          answer: answer || '',
-        });
+      updateCheckStatus({
+        check_id: predictedId,
+        status: answer ? 'finalized' : 'executed',
+        answer: answer || '',
+      });
 
-        if (answer) {
-          await bot.sendMessage(chatId,
-            `✅ Result for #${predictedId}:\n\n${esc(answer)}`,
-            { parse_mode: 'HTML' }
-          );
-        }
-      } catch (waitErr) {
-        updateCheckStatus({
-          check_id: predictedId,
-          status: 'submitted',
-          answer: '',
-        });
+      if (answer) {
+        await bot.sendMessage(chatId,
+          `✅ Result for #${predictedId}:\n\n${esc(answer)}`,
+          { parse_mode: 'HTML' }
+        );
+      } else {
+        await bot.sendMessage(chatId,
+          `ℹ️ No answer yet for #${predictedId}. The transaction may still be processing.\n` +
+          `${txLink(hash)}\n\n` +
+          `Use /status ${predictedId} to check later.`,
+          { parse_mode: 'HTML' }
+        );
       }
 
     } catch (err) {
       console.error('Check error:', err);
-      bot.sendMessage(chatId,
-        `❌ Error: ${err.message}` +
-        (err.message?.includes('execution failed') ? '\n\nThe contract may have an issue. Check the explorer for details.' : '')
-      );
+      const msg = err.message || '';
+      if (msg.includes('execution failed') || msg.includes('Missing or invalid')) {
+        bot.sendMessage(chatId,
+          `⏳ The validators are arguing this one out for #${predictedId}.\n` +
+          `Run /status ${predictedId} after 1 minute to see the conclusion on-chain.`
+        );
+      } else {
+        bot.sendMessage(chatId, `❌ Error: ${msg}`);
+      }
     }
   });
 }
