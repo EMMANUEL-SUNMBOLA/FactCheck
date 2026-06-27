@@ -54,8 +54,10 @@ export default function checkHandler(bot, client) {
       return bot.sendMessage(chatId, 'Bot is not configured for write operations (no PRIVATE_KEY).');
     }
 
+    let progressMsg, predictedId;
+
     try {
-      await bot.sendMessage(chatId,
+      progressMsg = await bot.sendMessage(chatId,
         `⏳ Submitting verification for:\n${esc(url)}\n\nQuestion: ${esc(question)}`,
         { parse_mode: 'HTML' }
       );
@@ -66,7 +68,7 @@ export default function checkHandler(bot, client) {
         args: [],
       });
 
-      const predictedId = BigInt(Number(total) + 1);
+      predictedId = BigInt(Number(total) + 1);
 
       const hash = await client.writeContract({
         address: config.contractAddress,
@@ -85,22 +87,22 @@ export default function checkHandler(bot, client) {
         status: 'submitted',
       });
 
-      await bot.sendMessage(chatId,
+      await bot.editMessageText(
         `✅ Transaction submitted!\n\n` +
         `Check ID: #${predictedId}\n` +
         `${txLink(hash)}\n\n` +
         `Waiting for consensus... (30s max)`,
-        { parse_mode: 'HTML' }
+        { chat_id: chatId, message_id: progressMsg.message_id, parse_mode: 'HTML' }
       );
 
       try {
         await client.waitForTransactionReceipt({ hash, status: 'ACCEPTED' });
       } catch (waitErr) {
         console.error('Wait error:', waitErr.message);
-        await bot.sendMessage(chatId,
+        await bot.editMessageText(
           `⏳ The validators are arguing this one out for #${predictedId}.\n` +
           `Run /status ${predictedId} after 1 minute to see the conclusion on-chain.`,
-          { parse_mode: 'HTML' }
+          { chat_id: chatId, message_id: progressMsg.message_id, parse_mode: 'HTML' }
         );
         updateCheckStatus({ check_id: predictedId, status: 'pending' });
         return;
@@ -124,10 +126,10 @@ export default function checkHandler(bot, client) {
         }
       } catch (readErr) {
         console.error('Read error:', readErr.message);
-        await bot.sendMessage(chatId,
+        await bot.editMessageText(
           `⏳ Result for #${predictedId} isn't readable yet — validators may still be reaching consensus.\n` +
           `Run /status ${predictedId} after 1 minute.`,
-          { parse_mode: 'HTML' }
+          { chat_id: chatId, message_id: progressMsg.message_id, parse_mode: 'HTML' }
         );
         updateCheckStatus({ check_id: predictedId, status: 'pending' });
         return;
@@ -140,16 +142,16 @@ export default function checkHandler(bot, client) {
       });
 
       if (answer) {
-        await bot.sendMessage(chatId,
+        await bot.editMessageText(
           `✅ Result for #${predictedId}:\n\n${esc(answer)}`,
-          { parse_mode: 'HTML' }
+          { chat_id: chatId, message_id: progressMsg.message_id, parse_mode: 'HTML' }
         );
       } else {
-        await bot.sendMessage(chatId,
+        await bot.editMessageText(
           `ℹ️ No answer yet for #${predictedId}. The transaction may still be processing.\n` +
           `${txLink(hash)}\n\n` +
           `Use /status ${predictedId} to check later.`,
-          { parse_mode: 'HTML' }
+          { chat_id: chatId, message_id: progressMsg.message_id, parse_mode: 'HTML' }
         );
       }
 
@@ -157,12 +159,20 @@ export default function checkHandler(bot, client) {
       console.error('Check error:', err);
       const msg = err.message || '';
       if (msg.includes('execution failed') || msg.includes('Missing or invalid')) {
-        bot.sendMessage(chatId,
-          `⏳ The validators are arguing this one out for #${predictedId}.\n` +
-          `Run /status ${predictedId} after 1 minute to see the conclusion on-chain.`
-        );
+        const editTo = progressMsg && predictedId
+          ? bot.editMessageText(
+              `⏳ The validators are arguing this one out for #${predictedId}.\n` +
+              `Run /status ${predictedId} after 1 minute to see the conclusion on-chain.`,
+              { chat_id: chatId, message_id: progressMsg.message_id, parse_mode: 'HTML' }
+            )
+          : bot.sendMessage(chatId,
+              `⏳ The validators are arguing this one out.\n` +
+              `Wait a minute and try /mychecks to see the latest.`
+            );
       } else {
-        bot.sendMessage(chatId, `❌ Error: ${msg}`);
+        const editTo = progressMsg
+          ? bot.editMessageText(`❌ Error: ${msg}`, { chat_id: chatId, message_id: progressMsg.message_id })
+          : bot.sendMessage(chatId, `❌ Error: ${msg}`);
       }
     }
   });
